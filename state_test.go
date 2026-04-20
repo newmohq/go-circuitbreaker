@@ -323,7 +323,7 @@ func TestRace(t *testing.T) {
 		_ = cb.Done(context.Background(), errors.New(""))
 	})
 	run(wg, func() {
-		_, _ = cb.Do(context.Background(), func() (interface{}, error) {
+		_, _ = cb.Do(context.Background(), func() (any, error) {
 			return nil, nil
 		})
 	})
