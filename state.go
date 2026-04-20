@@ -2,7 +2,7 @@ package circuitbreaker
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/cenkalti/backoff/v3"
+	"github.com/cenkalti/backoff/v5"
 )
 
 // each implementations of state represents State of circuit breaker.
@@ -18,18 +18,19 @@ type state interface {
 }
 
 // [Closed state]
-//   /onEntry
-//      - Reset counters.
-//      - Start ticker.
-//   /ready
-//      - returns true.
-//   /onFail
-//      - update counters.
-//      - If threshold reached, change state to [Open]
-//   /onTicker
-//      - reset counters.
-//   /onExit
-//      - stop ticker.
+//
+//	/onEntry
+//	   - Reset counters.
+//	   - Start ticker.
+//	/ready
+//	   - returns true.
+//	/onFail
+//	   - update counters.
+//	   - If threshold reached, change state to [Open]
+//	/onTicker
+//	   - reset counters.
+//	/onExit
+//	   - stop ticker.
 type stateClosed struct {
 	ticker *clock.Ticker
 	done   chan struct{}
@@ -77,14 +78,15 @@ func (st *stateClosed) onFail(cb *CircuitBreaker) {
 }
 
 // [Open state]
-//   /onEntry
-//      - Start timer.
-//   /ready
-//      - Returns false.
-//   /onTimer
-//     - Change state to [HalfOpen].
-//   /onExit
-//     - Stop timer.
+//
+//	/onEntry
+//	   - Start timer.
+//	/ready
+//	   - Returns false.
+//	/onTimer
+//	  - Change state to [HalfOpen].
+//	/onExit
+//	  - Stop timer.
 type stateOpen struct {
 	timer *clock.Timer
 }
@@ -104,13 +106,14 @@ func (st *stateOpen) onSuccess(cb *CircuitBreaker)  {}
 func (st *stateOpen) onFail(cb *CircuitBreaker)     {}
 
 // [HalfOpen state]
-//   /ready
-//      -> returns true
-//   /onSuccess
-//      -> Increment Success counter.
-//      -> If threshold reached, change state to [Closed].
-//   /onFail
-//      -> change state to [Open].
+//
+//	/ready
+//	   -> returns true
+//	/onSuccess
+//	   -> Increment Success counter.
+//	   -> If threshold reached, change state to [Closed].
+//	/onFail
+//	   -> change state to [Open].
 type stateHalfOpen struct{}
 
 func (st *stateHalfOpen) State() State                  { return StateHalfOpen }
@@ -122,6 +125,7 @@ func (st *stateHalfOpen) onSuccess(cb *CircuitBreaker) {
 		cb.setState(&stateClosed{})
 	}
 }
+
 func (st *stateHalfOpen) onFail(cb *CircuitBreaker) {
 	cb.setState(&stateOpen{})
 }

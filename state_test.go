@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/cenkalti/backoff/v3"
-	"github.com/mercari/go-circuitbreaker"
+	"github.com/cenkalti/backoff/v5"
+	"github.com/newmohq/go-circuitbreaker"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -183,8 +183,6 @@ func TestStateOpen(t *testing.T) {
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
-			MaxElapsedTime:      0,
-			Clock:               clkMock,
 		}
 		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
@@ -220,8 +218,6 @@ func TestStateOpen(t *testing.T) {
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
-			MaxElapsedTime:      0,
-			Clock:               clkMock,
 		}
 		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
