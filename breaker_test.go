@@ -58,7 +58,7 @@ func TestDo(t *testing.T) {
 		got, err := cb.Do(context.Background(), func() (any, error) {
 			return "data", wantErr
 		})
-		assert.Equal(t, err, wantErr)
+		assert.Equal(t, wantErr, err)
 		assert.Equal(t, "data", got.(string))
 		assert.Equal(t, int64(1), cb.Counters().Failures)
 	})
@@ -67,7 +67,7 @@ func TestDo(t *testing.T) {
 		cb := circuitbreaker.New()
 		wantErr := errors.New("something happens")
 		got, err := cb.Do(context.Background(), func() (any, error) { return "data", circuitbreaker.Ignore(wantErr) })
-		assert.Equal(t, err, wantErr)
+		assert.Equal(t, wantErr, err)
 		assert.Equal(t, "data", got.(string))
 		assert.Equal(t, int64(0), cb.Counters().Failures)
 	})
@@ -75,7 +75,7 @@ func TestDo(t *testing.T) {
 		cb := circuitbreaker.New()
 		wantErr := errors.New("something happens")
 		got, err := cb.Do(context.Background(), func() (any, error) { return "data", circuitbreaker.MarkAsSuccess(wantErr) })
-		assert.Equal(t, err, wantErr)
+		assert.Equal(t, wantErr, err)
 		assert.Equal(t, "data", got.(string))
 		assert.Equal(t, int64(0), cb.Counters().Failures)
 	})
@@ -98,7 +98,7 @@ func TestDo(t *testing.T) {
 					<-ctx.Done()
 					return "", cancelErr
 				})
-				assert.Equal(t, err, cancelErr)
+				assert.Equal(t, cancelErr, err)
 				assert.Equal(t, "", got.(string))
 				assert.Equal(t, test.ExpectedFailures, cb.Counters().Failures)
 			})
@@ -123,7 +123,7 @@ func TestDo(t *testing.T) {
 					<-ctx.Done()
 					return "", timeoutErr
 				})
-				assert.Equal(t, err, timeoutErr)
+				assert.Equal(t, timeoutErr, err)
 				assert.Equal(t, "", got.(string))
 				assert.Equal(t, test.ExpectedFailures, cb.Counters().Failures)
 			})
@@ -140,20 +140,20 @@ func TestDo(t *testing.T) {
 		wantErr := errors.New("something happens")
 
 		// ( Closed => Open => HalfOpen => Open => HalfOpen => Closed ) x 10 iterations.
-		for i := 0; i < 10; i++ {
+		for range 10 {
 
 			// State: Closed.
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				assert.Equal(t, circuitbreaker.StateClosed, cb.State())
 				got, err := cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-				assert.Equal(t, err, wantErr)
+				assert.Equal(t, wantErr, err)
 				assert.Equal(t, "data", got.(string))
 			}
 
 			// State: Closed => Open. Should return nil and ErrOpen error.
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 			got, err := cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-			assert.Equal(t, err, circuitbreaker.ErrOpen)
+			assert.Equal(t, circuitbreaker.ErrOpen, err)
 			assert.Nil(t, got)
 
 			// State: Open => HalfOpen.
@@ -162,7 +162,7 @@ func TestDo(t *testing.T) {
 
 			// State: HalfOpen => Open.
 			got, err = cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-			assert.Equal(t, err, wantErr)
+			assert.Equal(t, wantErr, err)
 			assert.Equal(t, "data", got.(string))
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
@@ -170,7 +170,7 @@ func TestDo(t *testing.T) {
 			clkMock.Add(1000 * time.Millisecond)
 
 			// State: HalfOpen => Close.
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 				got, err = cb.Do(context.Background(), func() (any, error) { return "data", nil })
 				assert.NoError(t, err)
@@ -304,10 +304,10 @@ func TestDoGeneric(t *testing.T) {
 		wantErr := errors.New("something happens")
 
 		// ( Closed => Open => HalfOpen => Open => HalfOpen => Closed ) x 10 iterations.
-		for i := 0; i < 10; i++ {
+		for range 10 {
 
 			// State: Closed.
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				assert.Equal(t, circuitbreaker.StateClosed, cb.State())
 				got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", wantErr })
 				assert.Equal(t, wantErr, err)
@@ -334,7 +334,7 @@ func TestDoGeneric(t *testing.T) {
 			clkMock.Add(1000 * time.Millisecond)
 
 			// State: HalfOpen => Close.
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 				got, err = circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", nil })
 				assert.NoError(t, err)
@@ -375,10 +375,10 @@ func TestIgnore(t *testing.T) {
 	t.Run("ignore", func(t *testing.T) {
 		originalErr := errors.New("logic error")
 		if err := circuitbreaker.Ignore(originalErr); err != nil {
-			assert.Equal(t, err.Error(), "circuitbreaker does not mark this error as a failure: logic error")
+			assert.Equal(t, "circuitbreaker does not mark this error as a failure: logic error", err.Error())
 			nfe, ok := err.(*circuitbreaker.IgnorableError)
 			assert.True(t, ok)
-			assert.Equal(t, nfe.Unwrap(), originalErr)
+			assert.Equal(t, originalErr, nfe.Unwrap())
 		} else {
 			assert.Fail(t, "there should be an error here")
 		}
@@ -392,10 +392,10 @@ func TestMarkAsSuccess(t *testing.T) {
 	t.Run("MarkAsSuccess", func(t *testing.T) {
 		originalErr := errors.New("logic error")
 		if err := circuitbreaker.MarkAsSuccess(originalErr); err != nil {
-			assert.Equal(t, err.Error(), "circuitbreaker mark this error as a success: logic error")
+			assert.Equal(t, "circuitbreaker mark this error as a success: logic error", err.Error())
 			nfe, ok := err.(*circuitbreaker.SuccessMarkableError)
 			assert.True(t, ok)
-			assert.Equal(t, nfe.Unwrap(), originalErr)
+			assert.Equal(t, originalErr, nfe.Unwrap())
 		} else {
 			assert.Fail(t, "there should be an error here")
 		}

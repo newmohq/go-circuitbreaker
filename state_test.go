@@ -20,7 +20,7 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// Scenario: 3 Fails. State changes to -> StateOpen.
 		cb.Fail()
 		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
