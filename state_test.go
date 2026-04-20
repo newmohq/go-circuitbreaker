@@ -15,6 +15,7 @@ import (
 )
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
@@ -53,6 +54,7 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 }
 
 func TestCircuitBreakerOnStateChange(t *testing.T) {
+	t.Parallel()
 	type stateChange struct {
 		from circuitbreaker.State
 		to   circuitbreaker.State
@@ -124,6 +126,7 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 // - Change state if Failures threshold reached.
 // - Interval ticker reset the internal counter..
 func TestStateClosed(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
@@ -157,6 +160,7 @@ func TestStateClosed(t *testing.T) {
 // - Ready() always returns false.
 // - Change state to StateHalfOpen after timer.
 func TestStateOpen(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
@@ -265,6 +269,7 @@ func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBr
 // - If get a fail, the state changes to Open.
 // - If get a success, the state changes to Closed.
 func TestHalfOpen(t *testing.T) {
+	t.Parallel()
 	clkMock := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clkMock),

@@ -43,6 +43,7 @@ func ExampleCircuitBreaker() {
 }
 
 func TestDoGeneric(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
 		cb := circuitbreaker.New()
 		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
@@ -207,6 +208,7 @@ func TestDoGeneric(t *testing.T) {
 }
 
 func TestCircuitBreakerTripFuncs(t *testing.T) {
+	t.Parallel()
 	t.Run("TripFuncThreshold", func(t *testing.T) {
 		shouldTrip := circuitbreaker.NewTripFuncThreshold(5)
 		assert.False(t, shouldTrip(&circuitbreaker.Counters{Failures: 4}))
@@ -230,6 +232,7 @@ func TestCircuitBreakerTripFuncs(t *testing.T) {
 }
 
 func TestIgnore(t *testing.T) {
+	t.Parallel()
 	t.Run("nil", func(t *testing.T) {
 		assert.Nil(t, circuitbreaker.Ignore(nil))
 	})
@@ -247,6 +250,7 @@ func TestIgnore(t *testing.T) {
 }
 
 func TestMarkAsSuccess(t *testing.T) {
+	t.Parallel()
 	t.Run("nil", func(t *testing.T) {
 		assert.Nil(t, circuitbreaker.MarkAsSuccess(nil))
 	})
@@ -264,6 +268,7 @@ func TestMarkAsSuccess(t *testing.T) {
 }
 
 func TestSuccess(t *testing.T) {
+	t.Parallel()
 	cb := circuitbreaker.New()
 	cb.Success()
 	assert.Equal(t, circuitbreaker.Counters{Successes: 1, Failures: 0, ConsecutiveSuccesses: 1, ConsecutiveFailures: 0}, cb.Counters())
@@ -275,6 +280,7 @@ func TestSuccess(t *testing.T) {
 }
 
 func TestFail(t *testing.T) {
+	t.Parallel()
 	cb := circuitbreaker.New()
 	cb.Fail()
 	assert.Equal(t, circuitbreaker.Counters{Successes: 0, Failures: 1, ConsecutiveSuccesses: 0, ConsecutiveFailures: 1}, cb.Counters())
@@ -287,6 +293,7 @@ func TestFail(t *testing.T) {
 
 // TestReset tests if Reset resets all counters.
 func TestReset(t *testing.T) {
+	t.Parallel()
 	cb := circuitbreaker.New()
 	cb.Success()
 	cb.Reset()
@@ -298,6 +305,7 @@ func TestReset(t *testing.T) {
 }
 
 func TestReportFunctions(t *testing.T) {
+	t.Parallel()
 	t.Run("Failed if ctx.Err() == nil", func(t *testing.T) {
 		cb := circuitbreaker.New()
 		cb.FailWithContext(context.Background())
