@@ -1,8 +1,7 @@
 # go-circuitbreaker
 
-[![GoDoc](https://godoc.org/github.com/newmohq/go-circuitbreaker?status.svg)](https://godoc.org/github.com/newmohq/go-circuitbreaker)
-![lint](https://github.com/newmohq/go-circuitbreaker/actions/workflows/lint.yml/badge.svg)
-![unittests](https://github.com/newmohq/go-circuitbreaker/actions/workflows/unit_tests.yml/badge.svg)
+[![lint](https://github.com/newmohq/go-circuitbreaker/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/newmohq/go-circuitbreaker/actions/workflows/lint.yml)
+[![acceptance](https://github.com/newmohq/go-circuitbreaker/actions/workflows/unit_tests.yml/badge.svg?branch=main)](https://github.com/newmohq/go-circuitbreaker/actions/workflows/unit_tests.yml)
 
 go-circuitbreaker is a Circuit Breaker pattern implementation in Go.
 
