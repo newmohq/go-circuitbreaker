@@ -12,4 +12,7 @@ jobs:
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: stable
-      - run: go tool golangci-lint run ./...
+      # Keep version in sync with the golangci-lint tool dependency in go.mod.
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7.0.1
+        with:
+          version: v2.11.4
