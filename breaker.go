@@ -447,16 +447,16 @@ func (cb *CircuitBreaker) Done(ctx context.Context, err error) error {
 
 // State reports the curent State of cb.
 func (cb *CircuitBreaker) State() State {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
 	return cb.state.State()
 }
 
 // Counters returns internal counters. If current status is not
 // StateClosed, returns zero value.
 func (cb *CircuitBreaker) Counters() Counters {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
 	return cb.cnt
 }
 
