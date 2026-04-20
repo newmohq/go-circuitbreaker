@@ -257,7 +257,7 @@ func TestMarkAsSuccess(t *testing.T) {
 	t.Run("MarkAsSuccess", func(t *testing.T) {
 		originalErr := errors.New("logic error")
 		if err := circuitbreaker.MarkAsSuccess(originalErr); err != nil {
-			assert.Equal(t, "circuitbreaker mark this error as a success: logic error", err.Error())
+			assert.Equal(t, "circuitbreaker marks this error as a success: logic error", err.Error())
 			var nfe *circuitbreaker.SuccessMarkableError
 			assert.True(t, errors.As(err, &nfe))
 			assert.Equal(t, originalErr, nfe.Unwrap())

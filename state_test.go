@@ -257,6 +257,7 @@ func TestStateOpen(t *testing.T) {
 }
 
 func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBreaker, clock *clock.Mock, after time.Duration) {
+	t.Helper()
 	clock.Add(after - 1)
 	assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 

@@ -36,7 +36,7 @@ const (
 	StateHalfOpen State = "half-open"
 )
 
-// DefaultOpenBackOff returns defaultly used BackOff.
+// DefaultOpenBackOff returns the default BackOff.
 func DefaultOpenBackOff() backoff.BackOff {
 	eb := backoff.NewExponentialBackOff()
 	eb.Reset()
@@ -127,13 +127,13 @@ func Ignore(err error) error {
 	return &IgnorableError{err}
 }
 
-// SuccessMarkableError signals that the operation should be mark as success.
+// SuccessMarkableError signals that the operation should be marked as success.
 type SuccessMarkableError struct {
 	err error
 }
 
 func (e *SuccessMarkableError) Error() string {
-	return fmt.Sprintf("circuitbreaker mark this error as a success: %s", e.err.Error())
+	return fmt.Sprintf("circuitbreaker marks this error as a success: %s", e.err.Error())
 }
 
 // Unwrap unwraps e.
@@ -172,9 +172,8 @@ type options struct {
 	// value and OpenBackOff is empty, return value of DefaultOpenBackOff() is
 	// used.
 	//
-	// NOTE: Please make sure not to set the ExponentialBackOff.MaxElapsedTime >
-	// 0 for OpenBackOff. If so, your CB don't close after your period of the
-	// StateOpened gets longer than the MaxElapsedTime.
+	// If NextBackOff returns backoff.Stop, the CircuitBreaker stays in
+	// StateOpened until SetState or Reset is called explicitly.
 	openBackOff backoff.BackOff
 
 	// HalfOpenMaxSuccesses is max count of successive successes during the state
@@ -379,8 +378,7 @@ func Do[T any](cb *CircuitBreaker, ctx context.Context, o func() (T, error)) (T,
 	return result, cb.Done(ctx, err)
 }
 
-// Ready reports if cb is ready to execute an operation. Ready does not give
-// any change to cb.
+// Ready reports if cb is ready to execute an operation. Ready does not modify cb.
 func (cb *CircuitBreaker) Ready() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
@@ -445,15 +443,15 @@ func (cb *CircuitBreaker) Done(ctx context.Context, err error) error {
 	return err
 }
 
-// State reports the curent State of cb.
+// State reports the current State of cb.
 func (cb *CircuitBreaker) State() State {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.state.State()
 }
 
-// Counters returns internal counters. If current status is not
-// StateClosed, returns zero value.
+// Counters returns a snapshot of the internal counters regardless of
+// the current State.
 func (cb *CircuitBreaker) Counters() Counters {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
