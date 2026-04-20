@@ -17,13 +17,6 @@ linters:
     - usestdlibvars
     - modernize
     - exhaustive
-  exclusions:
-    rules:
-      - path: _test\.go
-        linters:
-          - errcheck
-          - gosec
-          - unused
   settings:
     staticcheck:
       checks:
@@ -31,17 +24,10 @@ linters:
         - "-ST1000"
     errcheck:
       check-type-assertions: true
-      check-blank: true
-      exclude-functions:
-        - (io.ReadCloser).Close
-        - os.Remove
     unused:
       parameters-are-used: true
     exhaustive:
       default-signifies-exhaustive: true
-    gosec:
-      excludes:
-        - G304
 
 formatters:
   enable:
