@@ -38,9 +38,9 @@ const (
 
 // DefaultOpenBackOff returns defaultly used BackOff.
 func DefaultOpenBackOff() backoff.BackOff {
-	_backoff := backoff.NewExponentialBackOff()
-	_backoff.Reset()
-	return _backoff
+	eb := backoff.NewExponentialBackOff()
+	eb.Reset()
+	return eb
 }
 
 // Counters holds internal counter(s) of CircuitBreaker.
