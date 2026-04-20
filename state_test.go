@@ -84,10 +84,10 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	}
 	var actualStateChanges []stateChange
 
-	clock := clock.NewMock()
+	clk := clock.NewMock()
 	cb := circuitbreaker.New(
 		circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
-		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithClock(clk),
 		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4),
 		circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
@@ -104,13 +104,13 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	cb.Fail()
 
 	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
-	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+	assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 	// Scenario: Hit Fail. State back to StateOpen.
 	cb.Fail()
 
 	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
-	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+	assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 	// Scenario: Hit Success. State -> StateClosed.
 	cb.Success()
