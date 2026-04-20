@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/newmohq/go-circuitbreaker"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/newmohq/go-circuitbreaker"
 )
 
 type user struct {
@@ -26,7 +27,7 @@ func ExampleCircuitBreaker() {
 	cb := circuitbreaker.New()
 	ctx := context.Background()
 
-	data, err := cb.Do(context.Background(), func() (any, error) {
+	data, err := circuitbreaker.Do(cb, ctx, func() (*user, error) {
 		user, err := fetchUserInfo(ctx, "太郎")
 		if err != nil && err.Error() == "UserNoFound" {
 			// If you received a application level error, wrap it with Ignore to
@@ -38,153 +39,13 @@ func ExampleCircuitBreaker() {
 	if err != nil {
 		log.Fatalf("failed to fetch user:%s\n", err.Error())
 	}
-	log.Printf("fetched user:%+v\n", data.(*user))
-}
-
-func TestDo(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		cb := circuitbreaker.New()
-		got, err := cb.Do(context.Background(), func() (any, error) {
-			return "data", nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, "data", got.(string))
-		assert.Equal(t, int64(0), cb.Counters().Failures)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		cb := circuitbreaker.New()
-		wantErr := errors.New("something happens")
-		got, err := cb.Do(context.Background(), func() (any, error) {
-			return "data", wantErr
-		})
-		assert.Equal(t, wantErr, err)
-		assert.Equal(t, "data", got.(string))
-		assert.Equal(t, int64(1), cb.Counters().Failures)
-	})
-
-	t.Run("ignore", func(t *testing.T) {
-		cb := circuitbreaker.New()
-		wantErr := errors.New("something happens")
-		got, err := cb.Do(context.Background(), func() (any, error) { return "data", circuitbreaker.Ignore(wantErr) })
-		assert.Equal(t, wantErr, err)
-		assert.Equal(t, "data", got.(string))
-		assert.Equal(t, int64(0), cb.Counters().Failures)
-	})
-	t.Run("markassuccess", func(t *testing.T) {
-		cb := circuitbreaker.New()
-		wantErr := errors.New("something happens")
-		got, err := cb.Do(context.Background(), func() (any, error) { return "data", circuitbreaker.MarkAsSuccess(wantErr) })
-		assert.Equal(t, wantErr, err)
-		assert.Equal(t, "data", got.(string))
-		assert.Equal(t, int64(0), cb.Counters().Failures)
-	})
-
-	t.Run("context-canceled", func(t *testing.T) {
-		tests := []struct {
-			FailOnContextCancel bool
-			ExpectedFailures    int64
-		}{
-			{FailOnContextCancel: true, ExpectedFailures: 1},
-			{FailOnContextCancel: false, ExpectedFailures: 0},
-		}
-		for _, test := range tests {
-			cancelErr := errors.New("context's Done channel closed.")
-			t.Run(fmt.Sprintf("FailOnContextCanceled=%t", test.FailOnContextCancel), func(t *testing.T) {
-				cb := circuitbreaker.New(circuitbreaker.WithFailOnContextCancel(test.FailOnContextCancel))
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel()
-				got, err := cb.Do(ctx, func() (any, error) {
-					<-ctx.Done()
-					return "", cancelErr
-				})
-				assert.Equal(t, cancelErr, err)
-				assert.Equal(t, "", got.(string))
-				assert.Equal(t, test.ExpectedFailures, cb.Counters().Failures)
-			})
-		}
-	})
-
-	t.Run("context-timeout", func(t *testing.T) {
-		tests := []struct {
-			FailOnContextDeadline bool
-			ExpectedFailures      int64
-		}{
-			{FailOnContextDeadline: true, ExpectedFailures: 1},
-			{FailOnContextDeadline: false, ExpectedFailures: 0},
-		}
-		for _, test := range tests {
-			timeoutErr := errors.New("context's Done channel closed")
-			t.Run(fmt.Sprintf("FailOnContextDeadline=%t", test.FailOnContextDeadline), func(t *testing.T) {
-				cb := circuitbreaker.New(circuitbreaker.WithFailOnContextDeadline(test.FailOnContextDeadline))
-				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-				defer cancel()
-				got, err := cb.Do(ctx, func() (any, error) {
-					<-ctx.Done()
-					return "", timeoutErr
-				})
-				assert.Equal(t, timeoutErr, err)
-				assert.Equal(t, "", got.(string))
-				assert.Equal(t, test.ExpectedFailures, cb.Counters().Failures)
-			})
-		}
-	})
-
-	t.Run("cyclic-state-transition", func(t *testing.T) {
-		clkMock := clock.NewMock()
-		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
-			circuitbreaker.WithClock(clkMock),
-			circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
-			circuitbreaker.WithHalfOpenMaxSuccesses(4))
-
-		wantErr := errors.New("something happens")
-
-		// ( Closed => Open => HalfOpen => Open => HalfOpen => Closed ) x 10 iterations.
-		for range 10 {
-
-			// State: Closed.
-			for range 3 {
-				assert.Equal(t, circuitbreaker.StateClosed, cb.State())
-				got, err := cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-				assert.Equal(t, wantErr, err)
-				assert.Equal(t, "data", got.(string))
-			}
-
-			// State: Closed => Open. Should return nil and ErrOpen error.
-			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
-			got, err := cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-			assert.Equal(t, circuitbreaker.ErrOpen, err)
-			assert.Nil(t, got)
-
-			// State: Open => HalfOpen.
-			clkMock.Add(1000 * time.Millisecond)
-			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
-
-			// State: HalfOpen => Open.
-			got, err = cb.Do(context.Background(), func() (any, error) { return "data", wantErr })
-			assert.Equal(t, wantErr, err)
-			assert.Equal(t, "data", got.(string))
-			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
-
-			// State: Open => HalfOpen.
-			clkMock.Add(1000 * time.Millisecond)
-
-			// State: HalfOpen => Close.
-			for range 4 {
-				assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
-				got, err = cb.Do(context.Background(), func() (any, error) { return "data", nil })
-				assert.NoError(t, err)
-				assert.Equal(t, "data", got.(string))
-			}
-			assert.Equal(t, circuitbreaker.StateClosed, cb.State())
-		}
-	})
+	log.Printf("fetched user:%+v\n", data)
 }
 
 func TestDoGeneric(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		cb := circuitbreaker.New()
-		got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
 			return "data", nil
 		})
 		assert.NoError(t, err)
@@ -195,7 +56,7 @@ func TestDoGeneric(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		cb := circuitbreaker.New()
 		wantErr := errors.New("something happens")
-		got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
 			return "data", wantErr
 		})
 		assert.Equal(t, wantErr, err)
@@ -206,7 +67,7 @@ func TestDoGeneric(t *testing.T) {
 	t.Run("open", func(t *testing.T) {
 		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)))
 		cb.Fail()
-		got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
 			return "data", nil
 		})
 		assert.Equal(t, circuitbreaker.ErrOpen, err)
@@ -216,7 +77,7 @@ func TestDoGeneric(t *testing.T) {
 	t.Run("ignore", func(t *testing.T) {
 		cb := circuitbreaker.New()
 		wantErr := errors.New("something happens")
-		got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
 			return "data", circuitbreaker.Ignore(wantErr)
 		})
 		assert.Equal(t, wantErr, err)
@@ -227,7 +88,7 @@ func TestDoGeneric(t *testing.T) {
 	t.Run("markassuccess", func(t *testing.T) {
 		cb := circuitbreaker.New()
 		wantErr := errors.New("something happens")
-		got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) {
 			return "data", circuitbreaker.MarkAsSuccess(wantErr)
 		})
 		assert.Equal(t, wantErr, err)
@@ -249,7 +110,7 @@ func TestDoGeneric(t *testing.T) {
 				cb := circuitbreaker.New(circuitbreaker.WithFailOnContextCancel(test.FailOnContextCancel))
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
-				got, err := circuitbreaker.Do[string](cb, ctx, func() (string, error) {
+				got, err := circuitbreaker.Do(cb, ctx, func() (string, error) {
 					<-ctx.Done()
 					return "", cancelErr
 				})
@@ -274,7 +135,7 @@ func TestDoGeneric(t *testing.T) {
 				cb := circuitbreaker.New(circuitbreaker.WithFailOnContextDeadline(test.FailOnContextDeadline))
 				ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 				defer cancel()
-				got, err := circuitbreaker.Do[string](cb, ctx, func() (string, error) {
+				got, err := circuitbreaker.Do(cb, ctx, func() (string, error) {
 					<-ctx.Done()
 					return "", timeoutErr
 				})
@@ -287,7 +148,7 @@ func TestDoGeneric(t *testing.T) {
 
 	t.Run("struct-type", func(t *testing.T) {
 		cb := circuitbreaker.New()
-		got, err := circuitbreaker.Do[*user](cb, context.Background(), func() (*user, error) {
+		got, err := circuitbreaker.Do(cb, context.Background(), func() (*user, error) {
 			return &user{name: "太郎", age: 30}, nil
 		})
 		assert.NoError(t, err)
@@ -309,14 +170,14 @@ func TestDoGeneric(t *testing.T) {
 			// State: Closed.
 			for range 3 {
 				assert.Equal(t, circuitbreaker.StateClosed, cb.State())
-				got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", wantErr })
+				got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) { return "data", wantErr })
 				assert.Equal(t, wantErr, err)
 				assert.Equal(t, "data", got)
 			}
 
 			// State: Closed => Open. Should return zero value and ErrOpen error.
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
-			got, err := circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", wantErr })
+			got, err := circuitbreaker.Do(cb, context.Background(), func() (string, error) { return "data", wantErr })
 			assert.Equal(t, circuitbreaker.ErrOpen, err)
 			assert.Equal(t, "", got)
 
@@ -325,7 +186,7 @@ func TestDoGeneric(t *testing.T) {
 			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 
 			// State: HalfOpen => Open.
-			got, err = circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", wantErr })
+			got, err = circuitbreaker.Do(cb, context.Background(), func() (string, error) { return "data", wantErr })
 			assert.Equal(t, wantErr, err)
 			assert.Equal(t, "data", got)
 			assert.Equal(t, circuitbreaker.StateOpen, cb.State())
@@ -336,7 +197,7 @@ func TestDoGeneric(t *testing.T) {
 			// State: HalfOpen => Close.
 			for range 4 {
 				assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
-				got, err = circuitbreaker.Do[string](cb, context.Background(), func() (string, error) { return "data", nil })
+				got, err = circuitbreaker.Do(cb, context.Background(), func() (string, error) { return "data", nil })
 				assert.NoError(t, err)
 				assert.Equal(t, "data", got)
 			}
@@ -376,8 +237,8 @@ func TestIgnore(t *testing.T) {
 		originalErr := errors.New("logic error")
 		if err := circuitbreaker.Ignore(originalErr); err != nil {
 			assert.Equal(t, "circuitbreaker does not mark this error as a failure: logic error", err.Error())
-			nfe, ok := err.(*circuitbreaker.IgnorableError)
-			assert.True(t, ok)
+			var nfe *circuitbreaker.IgnorableError
+			assert.True(t, errors.As(err, &nfe))
 			assert.Equal(t, originalErr, nfe.Unwrap())
 		} else {
 			assert.Fail(t, "there should be an error here")
@@ -393,8 +254,8 @@ func TestMarkAsSuccess(t *testing.T) {
 		originalErr := errors.New("logic error")
 		if err := circuitbreaker.MarkAsSuccess(originalErr); err != nil {
 			assert.Equal(t, "circuitbreaker mark this error as a success: logic error", err.Error())
-			nfe, ok := err.(*circuitbreaker.SuccessMarkableError)
-			assert.True(t, ok)
+			var nfe *circuitbreaker.SuccessMarkableError
+			assert.True(t, errors.As(err, &nfe))
 			assert.Equal(t, originalErr, nfe.Unwrap())
 		} else {
 			assert.Fail(t, "there should be an error here")

@@ -9,8 +9,9 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/cenkalti/backoff/v5"
-	"github.com/newmohq/go-circuitbreaker"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/newmohq/go-circuitbreaker"
 )
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
@@ -297,52 +298,44 @@ func TestHalfOpen(t *testing.T) {
 	})
 }
 
-func run(wg *sync.WaitGroup, f func()) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		f()
-	}()
-}
-
 func TestRace(t *testing.T) {
-	clock := clock.NewMock()
+	clk := clock.NewMock()
 	cb := circuitbreaker.New(
 		circuitbreaker.WithTripFunc(func(_ *circuitbreaker.Counters) bool { return true }),
-		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithClock(clk),
 		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond),
 	)
 	wg := &sync.WaitGroup{}
-	run(wg, func() {
+	wg.Go(func() {
 		cb.SetState(circuitbreaker.StateClosed)
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Reset()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		_ = cb.Done(context.Background(), errors.New(""))
 	})
-	run(wg, func() {
-		_, _ = cb.Do(context.Background(), func() (any, error) {
+	wg.Go(func() {
+		_, _ = circuitbreaker.Do(cb, context.Background(), func() (any, error) {
 			return nil, nil
 		})
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.State()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Fail()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Counters()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Ready()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Success()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.FailWithContext(context.Background())
 	})
 	wg.Wait()

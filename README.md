@@ -43,15 +43,14 @@ Wrapping your code block with `Do()` protects your process with Circuit Breaker.
 ```go
 var cb = circuitbreaker.New()
 
-u, err := cb.Do(ctx, func() (any, error) {
+user, err := circuitbreaker.Do(cb, ctx, func() (*User, error) {
   return fetchUserInfo(name)
 })
-user, _ := u.(*User) // Casting any into *User safely.
 ```
 
 ## Example using Done.
 
-The following example using Ready() and Done() is exactly equals to the above one. Since this style enables you to protect your processes without wrapping it and using type-unsafe any, it would make it easy to implement CB to your existing logic.
+The following example using Ready() and Done() is exactly equals to the above one. Since this style enables you to protect your processes without wrapping it, it would make it easy to implement CB to your existing logic.
 
 ```go
 var cb = circuitbreaker.New()
@@ -82,7 +81,7 @@ Sometimes, we would like to receive an error from a protected operation but don'
 ```go
 cb := circuitbreaker.New()
 
-data, err := cb.Do(context.Background(), func() (any, error) {
+u, err := circuitbreaker.Do(cb, context.Background(), func() (*User, error) {
   u, err := fetchUserInfo("john")
   if err == errUserNotFound {
     return u, circuitbreaker.Ignore(err) // cb does not treat the err as a failure.
