@@ -211,6 +211,15 @@ func TestStateOpen(t *testing.T) {
 			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 		}
 	})
+	t.Run("StopBackOff-keeps-open-without-panic", func(t *testing.T) {
+		cb := circuitbreaker.New(circuitbreaker.WithOpenTimeoutBackOff(&backoff.StopBackOff{}))
+		cb.SetState(circuitbreaker.StateOpen)
+		assert.False(t, cb.Ready())
+
+		assert.NotPanics(t, func() {
+			cb.SetState(circuitbreaker.StateClosed)
+		})
+	})
 	t.Run("OpenBackOff", func(t *testing.T) {
 		clkMock := clock.NewMock()
 		backoffTest := &backoff.ExponentialBackOff{

@@ -92,6 +92,11 @@ type stateOpen struct {
 }
 
 func (st *stateOpen) State() State { return StateOpen }
+
+// onEntry starts a timer that transitions to HalfOpen after the next backoff
+// period. If the configured BackOff returns backoff.Stop, the timer is not
+// started and the CircuitBreaker stays in Open until SetState or Reset is
+// called explicitly.
 func (st *stateOpen) onEntry(cb *CircuitBreaker) {
 	timeout := cb.openBackOff.NextBackOff()
 	if timeout != backoff.Stop {
@@ -99,8 +104,12 @@ func (st *stateOpen) onEntry(cb *CircuitBreaker) {
 	}
 }
 
-func (st *stateOpen) onTimer(cb *CircuitBreaker)    { cb.setStateWithLock(&stateHalfOpen{}) }
-func (st *stateOpen) onExit(cb *CircuitBreaker)     { st.timer.Stop() }
+func (st *stateOpen) onTimer(cb *CircuitBreaker) { cb.setStateWithLock(&stateHalfOpen{}) }
+func (st *stateOpen) onExit(cb *CircuitBreaker) {
+	if st.timer != nil {
+		st.timer.Stop()
+	}
+}
 func (st *stateOpen) ready(cb *CircuitBreaker) bool { return false }
 func (st *stateOpen) onSuccess(cb *CircuitBreaker)  {}
 func (st *stateOpen) onFail(cb *CircuitBreaker)     {}
