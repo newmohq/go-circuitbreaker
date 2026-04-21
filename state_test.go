@@ -8,19 +8,21 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/cenkalti/backoff/v3"
-	"github.com/mercari/go-circuitbreaker"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/newmohq/go-circuitbreaker"
 )
 
 func TestCircuitBreakerStateTransitions(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
 		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4))
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// Scenario: 3 Fails. State changes to -> StateOpen.
 		cb.Fail()
 		assert.Equal(t, circuitbreaker.StateClosed, cb.State())
@@ -52,6 +54,7 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 }
 
 func TestCircuitBreakerOnStateChange(t *testing.T) {
+	t.Parallel()
 	type stateChange struct {
 		from circuitbreaker.State
 		to   circuitbreaker.State
@@ -81,10 +84,10 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	}
 	var actualStateChanges []stateChange
 
-	clock := clock.NewMock()
+	clk := clock.NewMock()
 	cb := circuitbreaker.New(
 		circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
-		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithClock(clk),
 		circuitbreaker.WithOpenTimeout(1000*time.Millisecond),
 		circuitbreaker.WithHalfOpenMaxSuccesses(4),
 		circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
@@ -101,13 +104,13 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 	cb.Fail()
 
 	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen.
-	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+	assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 	// Scenario: Hit Fail. State back to StateOpen.
 	cb.Fail()
 
 	// Scenario: After OpenTimeout exceeded. -> StateHalfOpen. (again)
-	assertChangeStateToHalfOpenAfter(t, cb, clock, 1000*time.Millisecond)
+	assertChangeStateToHalfOpenAfter(t, cb, clk, 1000*time.Millisecond)
 
 	// Scenario: Hit Success. State -> StateClosed.
 	cb.Success()
@@ -123,6 +126,7 @@ func TestCircuitBreakerOnStateChange(t *testing.T) {
 // - Change state if Failures threshold reached.
 // - Interval ticker reset the internal counter..
 func TestStateClosed(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
@@ -156,6 +160,7 @@ func TestStateClosed(t *testing.T) {
 // - Ready() always returns false.
 // - Change state to StateHalfOpen after timer.
 func TestStateOpen(t *testing.T) {
+	t.Parallel()
 	clk := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clk),
@@ -183,8 +188,6 @@ func TestStateOpen(t *testing.T) {
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
-			MaxElapsedTime:      0,
-			Clock:               clkMock,
 		}
 		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
@@ -213,6 +216,15 @@ func TestStateOpen(t *testing.T) {
 			assert.Equal(t, circuitbreaker.StateHalfOpen, cb.State())
 		}
 	})
+	t.Run("StopBackOff-keeps-open-without-panic", func(t *testing.T) {
+		cb := circuitbreaker.New(circuitbreaker.WithOpenTimeoutBackOff(&backoff.StopBackOff{}))
+		cb.SetState(circuitbreaker.StateOpen)
+		assert.False(t, cb.Ready())
+
+		assert.NotPanics(t, func() {
+			cb.SetState(circuitbreaker.StateClosed)
+		})
+	})
 	t.Run("OpenBackOff", func(t *testing.T) {
 		clkMock := clock.NewMock()
 		backoffTest := &backoff.ExponentialBackOff{
@@ -220,8 +232,6 @@ func TestStateOpen(t *testing.T) {
 			RandomizationFactor: 0,
 			Multiplier:          2,
 			MaxInterval:         5 * time.Second,
-			MaxElapsedTime:      0,
-			Clock:               clkMock,
 		}
 		cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(1)),
 			circuitbreaker.WithHalfOpenMaxSuccesses(1),
@@ -247,6 +257,7 @@ func TestStateOpen(t *testing.T) {
 }
 
 func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBreaker, clock *clock.Mock, after time.Duration) {
+	t.Helper()
 	clock.Add(after - 1)
 	assert.Equal(t, circuitbreaker.StateOpen, cb.State())
 
@@ -259,6 +270,7 @@ func assertChangeStateToHalfOpenAfter(t *testing.T, cb *circuitbreaker.CircuitBr
 // - If get a fail, the state changes to Open.
 // - If get a success, the state changes to Closed.
 func TestHalfOpen(t *testing.T) {
+	t.Parallel()
 	clkMock := clock.NewMock()
 	cb := circuitbreaker.New(circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncThreshold(3)),
 		circuitbreaker.WithClock(clkMock),
@@ -292,52 +304,44 @@ func TestHalfOpen(t *testing.T) {
 	})
 }
 
-func run(wg *sync.WaitGroup, f func()) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		f()
-	}()
-}
-
 func TestRace(t *testing.T) {
-	clock := clock.NewMock()
+	clk := clock.NewMock()
 	cb := circuitbreaker.New(
 		circuitbreaker.WithTripFunc(func(_ *circuitbreaker.Counters) bool { return true }),
-		circuitbreaker.WithClock(clock),
+		circuitbreaker.WithClock(clk),
 		circuitbreaker.WithCounterResetInterval(1000*time.Millisecond),
 	)
 	wg := &sync.WaitGroup{}
-	run(wg, func() {
+	wg.Go(func() {
 		cb.SetState(circuitbreaker.StateClosed)
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Reset()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		_ = cb.Done(context.Background(), errors.New(""))
 	})
-	run(wg, func() {
-		_, _ = cb.Do(context.Background(), func() (interface{}, error) {
+	wg.Go(func() {
+		_, _ = circuitbreaker.Do(cb, context.Background(), func() (any, error) {
 			return nil, nil
 		})
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.State()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Fail()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Counters()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Ready()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.Success()
 	})
-	run(wg, func() {
+	wg.Go(func() {
 		cb.FailWithContext(context.Background())
 	})
 	wg.Wait()

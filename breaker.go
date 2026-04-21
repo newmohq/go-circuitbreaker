@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	backoff "github.com/cenkalti/backoff/v3"
+	backoff "github.com/cenkalti/backoff/v5"
 )
 
 var (
@@ -36,12 +36,11 @@ const (
 	StateHalfOpen State = "half-open"
 )
 
-// DefaultOpenBackOff returns defaultly used BackOff.
+// DefaultOpenBackOff returns the default BackOff.
 func DefaultOpenBackOff() backoff.BackOff {
-	_backoff := backoff.NewExponentialBackOff()
-	_backoff.MaxElapsedTime = 0
-	_backoff.Reset()
-	return _backoff
+	eb := backoff.NewExponentialBackOff()
+	eb.Reset()
+	return eb
 }
 
 // Counters holds internal counter(s) of CircuitBreaker.
@@ -128,13 +127,13 @@ func Ignore(err error) error {
 	return &IgnorableError{err}
 }
 
-// SuccessMarkableError signals that the operation should be mark as success.
+// SuccessMarkableError signals that the operation should be marked as success.
 type SuccessMarkableError struct {
 	err error
 }
 
 func (e *SuccessMarkableError) Error() string {
-	return fmt.Sprintf("circuitbreaker mark this error as a success: %s", e.err.Error())
+	return fmt.Sprintf("circuitbreaker marks this error as a success: %s", e.err.Error())
 }
 
 // Unwrap unwraps e.
@@ -173,9 +172,8 @@ type options struct {
 	// value and OpenBackOff is empty, return value of DefaultOpenBackOff() is
 	// used.
 	//
-	// NOTE: Please make sure not to set the ExponentialBackOff.MaxElapsedTime >
-	// 0 for OpenBackOff. If so, your CB don't close after your period of the
-	// StateOpened gets longer than the MaxElapsedTime.
+	// If NextBackOff returns backoff.Stop, the CircuitBreaker stays in
+	// StateOpened until SetState or Reset is called explicitly.
 	openBackOff backoff.BackOff
 
 	// HalfOpenMaxSuccesses is max count of successive successes during the state
@@ -309,18 +307,20 @@ func defaultOptions() *options {
 // An example of the constructor would be like this:
 //
 // cb := circuitbreaker.New(
-//     circuitbreaker.WithClock(clock.New()),
-//     circuitbreaker.WithFailOnContextCancel(true),
-//     circuitbreaker.WithFailOnContextDeadline(true),
-//     circuitbreaker.WithHalfOpenMaxSuccesses(10),
-//     circuitbreaker.WithOpenTimeoutBackOff(backoff.NewExponentialBackOff()),
-//     circuitbreaker.WithOpenTimeout(10*time.Second),
-//     circuitbreaker.WithCounterResetInterval(10*time.Second),
-//     // we also have NewTripFuncThreshold and NewTripFuncConsecutiveFailures
-//     circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncFailureRate(10, 0.4)),
-//     circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
-//       log.Printf("state changed from %s to %s\n", from, to)
-// 	}),
+//
+//	    circuitbreaker.WithClock(clock.New()),
+//	    circuitbreaker.WithFailOnContextCancel(true),
+//	    circuitbreaker.WithFailOnContextDeadline(true),
+//	    circuitbreaker.WithHalfOpenMaxSuccesses(10),
+//	    circuitbreaker.WithOpenTimeoutBackOff(backoff.NewExponentialBackOff()),
+//	    circuitbreaker.WithOpenTimeout(10*time.Second),
+//	    circuitbreaker.WithCounterResetInterval(10*time.Second),
+//	    // we also have NewTripFuncThreshold and NewTripFuncConsecutiveFailures
+//	    circuitbreaker.WithTripFunc(circuitbreaker.NewTripFuncFailureRate(10, 0.4)),
+//	    circuitbreaker.WithOnStateChangeHookFn(func(from, to circuitbreaker.State) {
+//	      log.Printf("state changed from %s to %s\n", from, to)
+//		}),
+//
 // )
 //
 // The default options are described in the defaultOptions function
@@ -349,11 +349,8 @@ func New(opts ...BreakerOption) *CircuitBreaker {
 	return cb
 }
 
-// An Operation is executed by Do().
-type Operation func() (interface{}, error)
-
-// Do executes the Operation o and returns the return values if
-// cb.Ready() is true. If not ready, cb doesn't execute f and returns
+// Do executes the operation o and returns the return values if
+// cb.Ready() is true. If not ready, it returns the zero value of T and
 // ErrOpen.
 //
 // If o returns a nil-error, cb counts the execution of Operation as a
@@ -365,23 +362,23 @@ type Operation func() (interface{}, error)
 // If o returns a *SuccessMarkableError, Do() count it as a success and returns
 // the wrapped error.
 //
-// If given Options' FailOnContextCancel is false (default), cb.Do
+// If given Options' FailOnContextCancel is false (default), Do
 // doesn't mark the Operation's error as a failure if ctx.Err() returns
 // context.Canceled.
 //
-// If given Options' FailOnContextDeadline is false (default), cb.Do
+// If given Options' FailOnContextDeadline is false (default), Do
 // doesn't mark the Operation's error as a failure if ctx.Err() returns
 // context.DeadlineExceeded.
-func (cb *CircuitBreaker) Do(ctx context.Context, o Operation) (interface{}, error) {
+func Do[T any](cb *CircuitBreaker, ctx context.Context, o func() (T, error)) (T, error) {
 	if !cb.Ready() {
-		return nil, ErrOpen
+		var zero T
+		return zero, ErrOpen
 	}
 	result, err := o()
 	return result, cb.Done(ctx, err)
 }
 
-// Ready reports if cb is ready to execute an operation. Ready does not give
-// any change to cb.
+// Ready reports if cb is ready to execute an operation. Ready does not modify cb.
 func (cb *CircuitBreaker) Ready() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
@@ -411,10 +408,10 @@ func (cb *CircuitBreaker) Fail() {
 // error, no Fail() called.
 func (cb *CircuitBreaker) FailWithContext(ctx context.Context) {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		if ctxErr == context.Canceled && !cb.failOnContextCancel {
+		if errors.Is(ctxErr, context.Canceled) && !cb.failOnContextCancel {
 			return
 		}
-		if ctxErr == context.DeadlineExceeded && !cb.failOnContextDeadline {
+		if errors.Is(ctxErr, context.DeadlineExceeded) && !cb.failOnContextDeadline {
 			return
 		}
 	}
@@ -431,12 +428,14 @@ func (cb *CircuitBreaker) Done(ctx context.Context, err error) error {
 		return nil
 	}
 
-	if successMarkableErr, ok := err.(*SuccessMarkableError); ok {
+	var successMarkableErr *SuccessMarkableError
+	if errors.As(err, &successMarkableErr) {
 		cb.Success()
 		return successMarkableErr.Unwrap()
 	}
 
-	if ignorableErr, ok := err.(*IgnorableError); ok {
+	var ignorableErr *IgnorableError
+	if errors.As(err, &ignorableErr) {
 		return ignorableErr.Unwrap()
 	}
 
@@ -444,18 +443,18 @@ func (cb *CircuitBreaker) Done(ctx context.Context, err error) error {
 	return err
 }
 
-// State reports the curent State of cb.
+// State reports the current State of cb.
 func (cb *CircuitBreaker) State() State {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
 	return cb.state.State()
 }
 
-// Counters returns internal counters. If current status is not
-// StateClosed, returns zero value.
+// Counters returns a snapshot of the internal counters regardless of
+// the current State.
 func (cb *CircuitBreaker) Counters() Counters {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
 	return cb.cnt
 }
 

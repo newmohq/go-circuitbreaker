@@ -2,7 +2,7 @@ package circuitbreaker
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/cenkalti/backoff/v3"
+	"github.com/cenkalti/backoff/v5"
 )
 
 // each implementations of state represents State of circuit breaker.
@@ -18,18 +18,19 @@ type state interface {
 }
 
 // [Closed state]
-//   /onEntry
-//      - Reset counters.
-//      - Start ticker.
-//   /ready
-//      - returns true.
-//   /onFail
-//      - update counters.
-//      - If threshold reached, change state to [Open]
-//   /onTicker
-//      - reset counters.
-//   /onExit
-//      - stop ticker.
+//
+//	/onEntry
+//	   - Reset counters.
+//	   - Start ticker.
+//	/ready
+//	   - returns true.
+//	/onFail
+//	   - update counters.
+//	   - If threshold reached, change state to [Open]
+//	/onTicker
+//	   - reset counters.
+//	/onExit
+//	   - stop ticker.
 type stateClosed struct {
 	ticker *clock.Ticker
 	done   chan struct{}
@@ -56,7 +57,7 @@ func (st *stateClosed) onEntry(cb *CircuitBreaker) {
 	}
 }
 
-func (st *stateClosed) onExit(cb *CircuitBreaker) {
+func (st *stateClosed) onExit(_ *CircuitBreaker) {
 	if st.done != nil {
 		close(st.done)
 	}
@@ -68,8 +69,8 @@ func (st *stateClosed) onTicker(cb *CircuitBreaker) {
 	cb.cnt.reset()
 }
 
-func (st *stateClosed) ready(cb *CircuitBreaker) bool { return true }
-func (st *stateClosed) onSuccess(cb *CircuitBreaker)  {}
+func (st *stateClosed) ready(_ *CircuitBreaker) bool { return true }
+func (st *stateClosed) onSuccess(_ *CircuitBreaker)  {}
 func (st *stateClosed) onFail(cb *CircuitBreaker) {
 	if cb.shouldTrip(&cb.cnt) {
 		cb.setState(&stateOpen{})
@@ -77,19 +78,25 @@ func (st *stateClosed) onFail(cb *CircuitBreaker) {
 }
 
 // [Open state]
-//   /onEntry
-//      - Start timer.
-//   /ready
-//      - Returns false.
-//   /onTimer
-//     - Change state to [HalfOpen].
-//   /onExit
-//     - Stop timer.
+//
+//	/onEntry
+//	   - Start timer.
+//	/ready
+//	   - Returns false.
+//	/onTimer
+//	  - Change state to [HalfOpen].
+//	/onExit
+//	  - Stop timer.
 type stateOpen struct {
 	timer *clock.Timer
 }
 
 func (st *stateOpen) State() State { return StateOpen }
+
+// onEntry starts a timer that transitions to HalfOpen after the next backoff
+// period. If the configured BackOff returns backoff.Stop, the timer is not
+// started and the CircuitBreaker stays in Open until SetState or Reset is
+// called explicitly.
 func (st *stateOpen) onEntry(cb *CircuitBreaker) {
 	timeout := cb.openBackOff.NextBackOff()
 	if timeout != backoff.Stop {
@@ -97,31 +104,37 @@ func (st *stateOpen) onEntry(cb *CircuitBreaker) {
 	}
 }
 
-func (st *stateOpen) onTimer(cb *CircuitBreaker)    { cb.setStateWithLock(&stateHalfOpen{}) }
-func (st *stateOpen) onExit(cb *CircuitBreaker)     { st.timer.Stop() }
-func (st *stateOpen) ready(cb *CircuitBreaker) bool { return false }
-func (st *stateOpen) onSuccess(cb *CircuitBreaker)  {}
-func (st *stateOpen) onFail(cb *CircuitBreaker)     {}
+func (st *stateOpen) onTimer(cb *CircuitBreaker) { cb.setStateWithLock(&stateHalfOpen{}) }
+func (st *stateOpen) onExit(_ *CircuitBreaker) {
+	if st.timer != nil {
+		st.timer.Stop()
+	}
+}
+func (st *stateOpen) ready(_ *CircuitBreaker) bool { return false }
+func (st *stateOpen) onSuccess(_ *CircuitBreaker)  {}
+func (st *stateOpen) onFail(_ *CircuitBreaker)     {}
 
 // [HalfOpen state]
-//   /ready
-//      -> returns true
-//   /onSuccess
-//      -> Increment Success counter.
-//      -> If threshold reached, change state to [Closed].
-//   /onFail
-//      -> change state to [Open].
+//
+//	/ready
+//	   -> returns true
+//	/onSuccess
+//	   -> Increment Success counter.
+//	   -> If threshold reached, change state to [Closed].
+//	/onFail
+//	   -> change state to [Open].
 type stateHalfOpen struct{}
 
-func (st *stateHalfOpen) State() State                  { return StateHalfOpen }
-func (st *stateHalfOpen) onEntry(cb *CircuitBreaker)    { cb.cnt.resetSuccesses() }
-func (st *stateHalfOpen) onExit(cb *CircuitBreaker)     {}
-func (st *stateHalfOpen) ready(cb *CircuitBreaker) bool { return true }
+func (st *stateHalfOpen) State() State                 { return StateHalfOpen }
+func (st *stateHalfOpen) onEntry(cb *CircuitBreaker)   { cb.cnt.resetSuccesses() }
+func (st *stateHalfOpen) onExit(_ *CircuitBreaker)     {}
+func (st *stateHalfOpen) ready(_ *CircuitBreaker) bool { return true }
 func (st *stateHalfOpen) onSuccess(cb *CircuitBreaker) {
 	if cb.cnt.Successes >= cb.halfOpenMaxSuccesses {
 		cb.setState(&stateClosed{})
 	}
 }
+
 func (st *stateHalfOpen) onFail(cb *CircuitBreaker) {
 	cb.setState(&stateOpen{})
 }

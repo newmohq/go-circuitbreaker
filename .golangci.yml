@@ -1,0 +1,47 @@
+version: "2"
+
+linters:
+  enable:
+    # Defaults
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    # Additional
+    - gosec
+    - bidichk
+    - errorlint
+    - bodyclose
+    - unconvert
+    - usestdlibvars
+    - modernize
+    - exhaustive
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000"
+    errcheck:
+      check-type-assertions: true
+    unused:
+      parameters-are-used: true
+    exhaustive:
+      default-signifies-exhaustive: true
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/newmohq/go-circuitbreaker
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
