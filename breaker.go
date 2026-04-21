@@ -382,7 +382,7 @@ func Do[T any](cb *CircuitBreaker, ctx context.Context, o func() (T, error)) (T,
 func (cb *CircuitBreaker) Ready() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
-	return cb.state.ready(cb)
+	return cb.state.ready()
 }
 
 // Success signals that an execution of operation has been completed
@@ -488,7 +488,7 @@ func (cb *CircuitBreaker) setStateWithLock(s state) {
 
 func (cb *CircuitBreaker) setState(s state) {
 	if cb.state != nil {
-		cb.state.onExit(cb)
+		cb.state.onExit()
 	}
 	from := cb.state
 	cb.state = s

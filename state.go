@@ -11,8 +11,8 @@ import (
 type state interface {
 	State() State
 	onEntry(cb *CircuitBreaker)
-	onExit(cb *CircuitBreaker)
-	ready(cb *CircuitBreaker) bool
+	onExit()
+	ready() bool
 	onSuccess(cb *CircuitBreaker)
 	onFail(cb *CircuitBreaker)
 }
@@ -57,7 +57,7 @@ func (st *stateClosed) onEntry(cb *CircuitBreaker) {
 	}
 }
 
-func (st *stateClosed) onExit(_ *CircuitBreaker) {
+func (st *stateClosed) onExit() {
 	if st.done != nil {
 		close(st.done)
 	}
@@ -69,8 +69,8 @@ func (st *stateClosed) onTicker(cb *CircuitBreaker) {
 	cb.cnt.reset()
 }
 
-func (st *stateClosed) ready(_ *CircuitBreaker) bool { return true }
-func (st *stateClosed) onSuccess(_ *CircuitBreaker)  {}
+func (st *stateClosed) ready() bool                 { return true }
+func (st *stateClosed) onSuccess(_ *CircuitBreaker) {}
 func (st *stateClosed) onFail(cb *CircuitBreaker) {
 	if cb.shouldTrip(&cb.cnt) {
 		cb.setState(&stateOpen{})
@@ -105,14 +105,14 @@ func (st *stateOpen) onEntry(cb *CircuitBreaker) {
 }
 
 func (st *stateOpen) onTimer(cb *CircuitBreaker) { cb.setStateWithLock(&stateHalfOpen{}) }
-func (st *stateOpen) onExit(_ *CircuitBreaker) {
+func (st *stateOpen) onExit() {
 	if st.timer != nil {
 		st.timer.Stop()
 	}
 }
-func (st *stateOpen) ready(_ *CircuitBreaker) bool { return false }
-func (st *stateOpen) onSuccess(_ *CircuitBreaker)  {}
-func (st *stateOpen) onFail(_ *CircuitBreaker)     {}
+func (st *stateOpen) ready() bool                 { return false }
+func (st *stateOpen) onSuccess(_ *CircuitBreaker) {}
+func (st *stateOpen) onFail(_ *CircuitBreaker)    {}
 
 // [HalfOpen state]
 //
@@ -125,10 +125,10 @@ func (st *stateOpen) onFail(_ *CircuitBreaker)     {}
 //	   -> change state to [Open].
 type stateHalfOpen struct{}
 
-func (st *stateHalfOpen) State() State                 { return StateHalfOpen }
-func (st *stateHalfOpen) onEntry(cb *CircuitBreaker)   { cb.cnt.resetSuccesses() }
-func (st *stateHalfOpen) onExit(_ *CircuitBreaker)     {}
-func (st *stateHalfOpen) ready(_ *CircuitBreaker) bool { return true }
+func (st *stateHalfOpen) State() State               { return StateHalfOpen }
+func (st *stateHalfOpen) onEntry(cb *CircuitBreaker) { cb.cnt.resetSuccesses() }
+func (st *stateHalfOpen) onExit()                    {}
+func (st *stateHalfOpen) ready() bool                { return true }
 func (st *stateHalfOpen) onSuccess(cb *CircuitBreaker) {
 	if cb.cnt.Successes >= cb.halfOpenMaxSuccesses {
 		cb.setState(&stateClosed{})
